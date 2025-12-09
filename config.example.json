@@ -1,0 +1,28 @@
+{
+  "_comment": "System Monitor Client Configuration Example",
+  "_instructions": "Copy this file to 'config.json' and modify the values according to your needs",
+  
+  "clientName": "My Server",
+  "_clientName_description": "Custom name for this client (will use hostname if empty)",
+  
+  "clientTags": ["production", "web-server", "us-east"],
+  "_clientTags_description": "Tags for categorizing and filtering clients (e.g., environment, role, location)",
+  
+  "clientPurpose": "Main production web server",
+  "_clientPurpose_description": "Description of what this client is used for",
+  
+  "serverUrl": "http://localhost:7788",
+  "_serverUrl_description": "URL of the monitoring server (use https:// in production)",
+  
+  "reportInterval": 60000,
+  "_reportInterval_description": "How often to report data to server in milliseconds (60000 = 1 minute)",
+  
+  "minReportInterval": 10000,
+  "_minReportInterval_description": "Minimum allowed report interval in milliseconds (10000 = 10 seconds)",
+  
+  "maxRetries": 3,
+  "_maxRetries_description": "Maximum number of retry attempts for failed reports",
+  
+  "cacheSize": 100,
+  "_cacheSize_description": "Maximum number of reports to cache locally when server is unreachable"
+}

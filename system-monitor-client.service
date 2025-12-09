@@ -1,0 +1,74 @@
+# System Monitor Client - systemd service file
+# Requirements: 6.1 - Deploy client as Linux systemd service
+#
+# Installation Instructions:
+# 1. Build the project: npm run build
+# 2. Create config.json with your configuration
+# 3. Update the paths in this file (WorkingDirectory, ExecStart)
+# 4. Copy this file to systemd directory:
+#    sudo cp system-monitor-client.service /etc/systemd/system/
+# 5. Reload systemd daemon:
+#    sudo systemctl daemon-reload
+# 6. Enable the service to start on boot:
+#    sudo systemctl enable system-monitor-client
+# 7. Start the service:
+#    sudo systemctl start system-monitor-client
+# 8. Check service status:
+#    sudo systemctl status system-monitor-client
+#
+# Service Management Commands:
+#   Start:   sudo systemctl start system-monitor-client
+#   Stop:    sudo systemctl stop system-monitor-client
+#   Restart: sudo systemctl restart system-monitor-client
+#   Status:  sudo systemctl status system-monitor-client
+#   Logs:    sudo journalctl -u system-monitor-client -f
+
+[Unit]
+Description=System Monitor Client
+Documentation=https://github.com/yourusername/system-monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# User and group to run the service as
+# For security, create a dedicated user:
+#   sudo useradd -r -s /bin/false system-monitor
+# Then uncomment these lines:
+# User=system-monitor
+# Group=system-monitor
+
+# Working directory - UPDATE THIS PATH to your installation directory
+WorkingDirectory=/opt/system-monitor-client
+
+# Command to start the service - UPDATE THIS PATH
+# Make sure Node.js is in the PATH or use absolute path to node
+ExecStart=/usr/bin/node dist/index.js
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Environment variables
+Environment=NODE_ENV=production
+
+# Standard output and error logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=system-monitor-client
+
+# Security settings (optional but recommended)
+# Uncomment these for enhanced security:
+# NoNewPrivileges=true
+# PrivateTmp=true
+# ProtectSystem=strict
+# ProtectHome=true
+# ReadWritePaths=/opt/system-monitor-client
+
+# Resource limits (optional)
+# LimitNOFILE=65536
+# MemoryLimit=512M
+
+[Install]
+WantedBy=multi-user.target

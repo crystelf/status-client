@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  System Monitor Client - macOS launchd service file
+  Requirements: 6.1 - Deploy client as macOS launchd service
+  
+  Installation Instructions:
+  1. Build the project: npm run build
+  2. Create config.json with your configuration
+  3. Update the paths in this file (WorkingDirectory, ProgramArguments)
+  4. Copy this file to LaunchAgents or LaunchDaemons:
+     
+     For current user (recommended for testing):
+       cp com.systemmonitor.client.plist ~/Library/LaunchAgents/
+       launchctl load ~/Library/LaunchAgents/com.systemmonitor.client.plist
+     
+     For system-wide (requires sudo):
+       sudo cp com.systemmonitor.client.plist /Library/LaunchDaemons/
+       sudo launchctl load /Library/LaunchDaemons/com.systemmonitor.client.plist
+  
+  Service Management Commands:
+    Load:    launchctl load ~/Library/LaunchAgents/com.systemmonitor.client.plist
+    Unload:  launchctl unload ~/Library/LaunchAgents/com.systemmonitor.client.plist
+    Start:   launchctl start com.systemmonitor.client
+    Stop:    launchctl stop com.systemmonitor.client
+    Status:  launchctl list | grep systemmonitor
+    Logs:    tail -f /tmp/system-monitor-client.log
+-->
+<plist version="1.0">
+<dict>
+  <!-- Service label (unique identifier) -->
+  <key>Label</key>
+  <string>com.systemmonitor.client</string>
+
+  <!-- Program to run -->
+  <key>ProgramArguments</key>
+  <array>
+    <!-- UPDATE THIS PATH to your Node.js installation -->
+    <string>/usr/local/bin/node</string>
+    <!-- UPDATE THIS PATH to your installation directory -->
+    <string>/opt/system-monitor-client/dist/index.js</string>
+  </array>
+
+  <!-- Working directory - UPDATE THIS PATH -->
+  <key>WorkingDirectory</key>
+  <string>/opt/system-monitor-client</string>
+
+  <!-- Run at load (start automatically) -->
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- Keep the service alive (restart if it crashes) -->
+  <key>KeepAlive</key>
+  <dict>
+    <!-- Restart if the process crashes -->
+    <key>SuccessfulExit</key>
+    <false/>
+    <!-- Don't restart if it exits cleanly -->
+    <key>Crashed</key>
+    <true/>
+  </dict>
+
+  <!-- Restart throttle interval (seconds) -->
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <!-- Environment variables -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_ENV</key>
+    <string>production</string>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <!-- Standard output log file -->
+  <key>StandardOutPath</key>
+  <string>/tmp/system-monitor-client.log</string>
+
+  <!-- Standard error log file -->
+  <key>StandardErrorPath</key>
+  <string>/tmp/system-monitor-client.error.log</string>
+
+  <!-- Process type (Adaptive is recommended for long-running services) -->
+  <key>ProcessType</key>
+  <string>Adaptive</string>
+
+  <!-- Nice value (process priority, -20 to 20, lower = higher priority) -->
+  <key>Nice</key>
+  <integer>0</integer>
+
+  <!-- Soft resource limits (optional) -->
+  <key>SoftResourceLimits</key>
+  <dict>
+    <!-- Maximum number of open files -->
+    <key>NumberOfFiles</key>
+    <integer>1024</integer>
+  </dict>
+
+  <!-- Hard resource limits (optional) -->
+  <key>HardResourceLimits</key>
+  <dict>
+    <!-- Maximum number of open files -->
+    <key>NumberOfFiles</key>
+    <integer>2048</integer>
+  </dict>
+
+  <!-- User to run as (optional, for system-wide daemons) -->
+  <!-- Uncomment if installing to /Library/LaunchDaemons -->
+  <!--
+  <key>UserName</key>
+  <string>_systemmonitor</string>
+  <key>GroupName</key>
+  <string>_systemmonitor</string>
+  -->
+
+  <!-- Session type (optional) -->
+  <!-- Use "Aqua" for user agents, "Background" for daemons -->
+  <key>SessionCreate</key>
+  <false/>
+
+</dict>
+</plist>
