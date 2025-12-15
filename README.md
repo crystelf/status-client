@@ -16,11 +16,17 @@ The monitoring client that collects system information and reports it to the mon
 ```bash
 npm install
 npm run build
+#or use pnpm √
 ```
 
 ## Configuration
 
 Create a `config.json` file in the client directory. See `config.example.json` for reference:
+
+```bash
+cp config.example.json config.json
+nano config.json
+```
 
 ```json
 {
@@ -48,17 +54,17 @@ Create a `config.json` file in the client directory. See `config.example.json` f
 
 ## Usage
 
-### Development Mode
-
-```bash
-npm run dev
-```
-
-### Production Mode
+### Production Mode(recommended)
 
 ```bash
 npm run build
 npm start
+```
+
+### Development Mode
+
+```bash
+npm run dev
 ```
 
 ## How It Works
