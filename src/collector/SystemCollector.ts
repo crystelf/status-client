@@ -141,13 +141,29 @@ export class SystemCollector {
         });
       }
 
-      // Collect network stats from individual interfaces
+      // Collect network stats - consistent approach across platforms
       const networkStats = await si.networkStats();
       this.logger.info(`Network stats received: ${networkStats.length} interfaces`);
       
       // Calculate total Rx and Tx bytes from all interfaces
-      const totalRx = networkStats.reduce((sum, stat) => sum + (stat.rx_bytes || 0), 0);
-      const totalTx = networkStats.reduce((sum, stat) => sum + (stat.tx_bytes || 0), 0);
+      let totalRx = 0;
+      let totalTx = 0;
+      
+      // Platform-specific data extraction
+      if (this.getPlatform() === 'windows') {
+        // Windows-specific handling - extract from networkStats
+        for (const stat of networkStats) {
+          // Windows networkStats has different property names
+          totalRx += (stat.rx_bytes || 0);
+          totalTx += (stat.tx_bytes || 0);
+          
+          this.logger.debug(`Windows interface ${stat.iface}: rx=${stat.rx_bytes}, tx=${stat.tx_bytes}`);
+        }
+      } else {
+        // Linux/macOS - standard property names
+        totalRx = networkStats.reduce((sum, stat) => sum + (stat.rx_bytes || 0), 0);
+        totalTx = networkStats.reduce((sum, stat) => sum + (stat.tx_bytes || 0), 0);
+      }
       
       // Create a simple object with total bytes for speed calculation
       const networkIO = { rx: totalRx, tx: totalTx };
