@@ -1,6 +1,6 @@
 import * as si from 'systeminformation';
 import * as os from 'os';
-import { DynamicSystemStatus, StaticSystemInfo } from './types';
+import { DynamicSystemStatus, StaticSystemInfo, DiskInfo, DiskUsage } from './types';
 import { Logger } from '../utils/logger';
 
 /**
@@ -50,21 +50,33 @@ export class SystemCollector {
       // Calculate total disk capacity
       const totalDisk = fsSize.reduce((sum, disk) => sum + disk.size, 0);
 
-      // Determine disk type (prioritize SSD/NVMe if any exist)
-      let diskType = 'HDD';
-      if (diskLayout.length > 0) {
-        const hasNVMe = diskLayout.some((disk) =>
-          disk.interfaceType?.toLowerCase().includes('nvme')
-        );
-        const hasSSD = diskLayout.some((disk) => disk.type?.toLowerCase().includes('ssd'));
+      // Create disk information array
+      const disks: DiskInfo[] = [];
+      const processedDevices = new Set<string>();
 
-        if (hasNVMe) {
-          diskType = 'NVMe';
-        } else if (hasSSD) {
-          diskType = 'SSD';
-        } else if (diskLayout[0].type) {
-          diskType = diskLayout[0].type;
+      for (const disk of diskLayout) {
+        // Skip duplicate devices
+        if (processedDevices.has(disk.device)) {
+          continue;
         }
+        processedDevices.add(disk.device);
+
+        // Determine disk type
+        let diskType = 'HDD';
+        if (disk.interfaceType?.toLowerCase().includes('nvme')) {
+          diskType = 'NVMe';
+        } else if (disk.type?.toLowerCase().includes('ssd')) {
+          diskType = 'SSD';
+        } else if (disk.type) {
+          diskType = disk.type;
+        }
+
+        disks.push({
+          device: disk.device,
+          size: disk.size,
+          type: diskType,
+          interfaceType: disk.interfaceType,
+        });
       }
 
       // Get geographic location (simplified - using timezone as proxy)
@@ -80,7 +92,7 @@ export class SystemCollector {
         totalMemory: memInfo.total,
         totalSwap: memInfo.swaptotal,
         totalDisk: totalDisk,
-        diskType: diskType,
+        disks: disks,
         location: location,
       };
     } catch (error) {
@@ -116,9 +128,31 @@ export class SystemCollector {
       const usedDiskSize = fsSize.reduce((sum, disk) => sum + disk.used, 0);
       const diskUsage = totalDiskSize > 0 ? (usedDiskSize / totalDiskSize) * 100 : 0;
 
+      // Create disk usage information array
+      const diskUsages: DiskUsage[] = [];
+      for (const disk of fsSize) {
+        diskUsages.push({
+          device: disk.fs,
+          size: disk.size,
+          used: disk.used,
+          available: disk.available,
+          usagePercent: disk.use || 0,
+          mountpoint: disk.mount,
+        });
+      }
+
+      // Collect network stats
       // Collect network stats
       const networkStats = await si.networkStats();
+      this.logger.info(`Network stats received: ${networkStats.length} interfaces`);
+      
+      // Log first few interfaces for debugging
+      networkStats.slice(0, 3).forEach((stat, index) => {
+        this.logger.info(`Interface ${index}: ${stat.iface}, operstate: ${stat.operstate}, rx_bytes: ${stat.rx_bytes}, tx_bytes: ${stat.tx_bytes}`);
+      });
+      
       const { upload, download } = this.calculateNetworkSpeed(networkStats, timestamp);
+      this.logger.info(`Network speeds calculated - Upload: ${upload} B/s, Download: ${download} B/s`);
 
       // Calculate memory usage percentage
       const memoryUsage = memInfo.total > 0 ? (memInfo.used / memInfo.total) * 100 : 0;
@@ -132,6 +166,7 @@ export class SystemCollector {
         memoryUsage: memoryUsage,
         swapUsage: swapUsage,
         diskUsage: diskUsage,
+        diskUsages: diskUsages,
         networkUpload: upload,
         networkDownload: download,
         timestamp: timestamp,
@@ -155,22 +190,46 @@ export class SystemCollector {
     networkStats: si.Systeminformation.NetworkStatsData[],
     timestamp: number
   ): { upload: number; download: number } {
-    if (networkStats.length === 0) {
+    // Log network stats for debugging
+    this.logger.debug(`Network interfaces found: ${networkStats.length}`);
+    
+    // Filter out loopback interfaces
+    const activeInterfaces = networkStats.filter(stat => {
+      // Skip loopback interfaces (lo on Linux, Loopback on Windows)
+      const isLoopback = stat.iface.startsWith('lo') || stat.iface.toLowerCase().includes('loopback');
+      // Skip inactive interfaces if operstate is available
+      const isActive = !stat.operstate || stat.operstate === 'up' || stat.operstate === 'unknown';
+      // Only include interfaces with data
+      const hasData = (stat.rx_bytes || 0) > 0 || (stat.tx_bytes || 0) > 0;
+      
+      this.logger.debug(`Interface ${stat.iface}: operstate=${stat.operstate}, rx_bytes=${stat.rx_bytes}, tx_bytes=${stat.tx_bytes}, isLoopback=${isLoopback}, isActive=${isActive}, hasData=${hasData}`);
+      
+      return !isLoopback && isActive;
+    });
+    
+    this.logger.debug(`Active interfaces: ${activeInterfaces.length}`);
+    
+    if (activeInterfaces.length === 0) {
       return { upload: 0, download: 0 };
     }
 
-    // Sum up all network interfaces
-    const totalRx = networkStats.reduce((sum, stat) => sum + (stat.rx_bytes || 0), 0);
-    const totalTx = networkStats.reduce((sum, stat) => sum + (stat.tx_bytes || 0), 0);
+    // Sum up all active network interfaces
+    const totalRx = activeInterfaces.reduce((sum, stat) => sum + (stat.rx_bytes || 0), 0);
+    const totalTx = activeInterfaces.reduce((sum, stat) => sum + (stat.tx_bytes || 0), 0);
+    
+    this.logger.debug(`Total Rx: ${totalRx}, Total Tx: ${totalTx}`);
 
     // If this is the first measurement, store it and return 0
     if (!this.lastNetworkStats) {
+      this.logger.debug('First measurement, storing initial stats');
       this.lastNetworkStats = { rx: totalRx, tx: totalTx, timestamp };
       return { upload: 0, download: 0 };
     }
 
     // Calculate time delta in seconds
     const timeDelta = (timestamp - this.lastNetworkStats.timestamp) / 1000;
+    
+    this.logger.debug(`Time delta: ${timeDelta}s`);
 
     if (timeDelta <= 0) {
       return { upload: 0, download: 0 };
@@ -179,10 +238,14 @@ export class SystemCollector {
     // Calculate bytes transferred since last measurement
     const rxDelta = totalRx - this.lastNetworkStats.rx;
     const txDelta = totalTx - this.lastNetworkStats.tx;
+    
+    this.logger.debug(`Rx delta: ${rxDelta}, Tx delta: ${txDelta}`);
 
     // Calculate speeds in bytes/second
     const download = Math.max(0, rxDelta / timeDelta);
     const upload = Math.max(0, txDelta / timeDelta);
+    
+    this.logger.debug(`Calculated speeds - Upload: ${upload} B/s, Download: ${download} B/s`);
 
     // Update last stats
     this.lastNetworkStats = { rx: totalRx, tx: totalTx, timestamp };
