@@ -141,17 +141,18 @@ export class SystemCollector {
         });
       }
 
-      // Collect network stats
-      // Collect network stats
+      // Collect network stats from individual interfaces
       const networkStats = await si.networkStats();
       this.logger.info(`Network stats received: ${networkStats.length} interfaces`);
       
-      // Log first few interfaces for debugging
-      networkStats.slice(0, 3).forEach((stat, index) => {
-        this.logger.info(`Interface ${index}: ${stat.iface}, operstate: ${stat.operstate}, rx_bytes: ${stat.rx_bytes}, tx_bytes: ${stat.tx_bytes}`);
-      });
+      // Calculate total Rx and Tx bytes from all interfaces
+      const totalRx = networkStats.reduce((sum, stat) => sum + (stat.rx_bytes || 0), 0);
+      const totalTx = networkStats.reduce((sum, stat) => sum + (stat.tx_bytes || 0), 0);
       
-      const { upload, download } = this.calculateNetworkSpeed(networkStats, timestamp);
+      // Create a simple object with total bytes for speed calculation
+      const networkIO = { rx: totalRx, tx: totalTx };
+      
+      const { upload, download } = this.calculateNetworkSpeedFromIO(networkIO, timestamp);
       this.logger.info(`Network speeds calculated - Upload: ${upload} B/s, Download: ${download} B/s`);
 
       // Calculate memory usage percentage
@@ -186,6 +187,61 @@ export class SystemCollector {
    * @param timestamp Current timestamp
    * @returns Object with upload and download speeds in bytes/second
    */
+  /**
+   * Calculate network speed using system-level network IO stats
+   * Uses delta between current and previous measurements
+   * @param networkIO Current network IO statistics
+   * @param timestamp Current timestamp
+   * @returns Object with upload and download speeds in bytes/second
+   */
+  private calculateNetworkSpeedFromIO(
+    networkIO: any,
+    timestamp: number
+  ): { upload: number; download: number } {
+    // Get current total Rx and Tx bytes (use correct property names for networkIO)
+    const currentRx = networkIO.rx || 0;
+    const currentTx = networkIO.tx || 0;
+    
+    this.logger.debug(`Current Rx: ${currentRx}, Current Tx: ${currentTx}`);
+
+    // If this is the first measurement, store it and return 0
+    if (!this.lastNetworkStats) {
+      this.logger.debug('First measurement, storing initial stats');
+      this.lastNetworkStats = { rx: currentRx, tx: currentTx, timestamp };
+      return { upload: 0, download: 0 };
+    }
+
+    // Calculate time delta in seconds
+    const timeDelta = (timestamp - this.lastNetworkStats.timestamp) / 1000;
+    
+    this.logger.debug(`Time delta: ${timeDelta}s`);
+
+    if (timeDelta <= 0) {
+      return { upload: 0, download: 0 };
+    }
+
+    // Calculate bytes transferred since last measurement
+    const rxDelta = currentRx - this.lastNetworkStats.rx;
+    const txDelta = currentTx - this.lastNetworkStats.tx;
+    
+    this.logger.debug(`Rx delta: ${rxDelta}, Tx delta: ${txDelta}`);
+
+    // Calculate speeds in bytes/second
+    const download = Math.max(0, rxDelta / timeDelta);
+    const upload = Math.max(0, txDelta / timeDelta);
+    
+    this.logger.debug(`Calculated speeds - Upload: ${upload} B/s, Download: ${download} B/s`);
+
+    // Update last stats
+    this.lastNetworkStats = { rx: currentRx, tx: currentTx, timestamp };
+
+    return { upload, download };
+  }
+
+  /**
+   * Calculate network speed from individual network interfaces
+   * This method is kept for backward compatibility but not used by default
+   */
   private calculateNetworkSpeed(
     networkStats: si.Systeminformation.NetworkStatsData[],
     timestamp: number
@@ -199,10 +255,6 @@ export class SystemCollector {
       const isLoopback = stat.iface.startsWith('lo') || stat.iface.toLowerCase().includes('loopback');
       // Skip inactive interfaces if operstate is available
       const isActive = !stat.operstate || stat.operstate === 'up' || stat.operstate === 'unknown';
-      // Only include interfaces with data
-      const hasData = (stat.rx_bytes || 0) > 0 || (stat.tx_bytes || 0) > 0;
-      
-      this.logger.debug(`Interface ${stat.iface}: operstate=${stat.operstate}, rx_bytes=${stat.rx_bytes}, tx_bytes=${stat.tx_bytes}, isLoopback=${isLoopback}, isActive=${isActive}, hasData=${hasData}`);
       
       return !isLoopback && isActive;
     });
