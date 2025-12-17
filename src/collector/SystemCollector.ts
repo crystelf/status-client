@@ -8,22 +8,15 @@ import { Logger } from '../utils/logger';
  * Responsible for collecting both static system information and dynamic system status
  */
 export class SystemCollector {
-  private lastNetworkStats: { rx: number; tx: number; timestamp: number } | null = null;
   private logger: Logger;
+  private lastNetSnapshot?: {
+    rx: number;
+    tx: number;
+    time: number;
+  };
 
   constructor() {
     this.logger = new Logger('SystemCollector');
-  }
-
-  /**
-   * Get the current platform type
-   * @returns Platform identifier: 'windows', 'linux', or 'darwin'
-   */
-  getPlatform(): 'windows' | 'linux' | 'darwin' {
-    const platform = os.platform();
-    if (platform === 'win32') return 'windows';
-    if (platform === 'darwin') return 'darwin';
-    return 'linux';
   }
 
   /**
@@ -142,34 +135,47 @@ export class SystemCollector {
       }
 
       // Collect network stats - consistent approach across platforms
-      const networkStats = await si.networkStats();
-      this.logger.info(`Network stats received: ${networkStats.length} interfaces`);
-      
-      // Calculate total Rx and Tx bytes from all interfaces
+      const ifaces = (await si.networkInterfaces()).filter(
+        (i) => i.operstate === 'up' && !i.internal && !i.iface.toLowerCase().includes('loopback')
+      );
+
       let totalRx = 0;
       let totalTx = 0;
-      
-      // Platform-specific data extraction
-      if (this.getPlatform() === 'windows') {
-        // Windows-specific handling - extract from networkStats
-        for (const stat of networkStats) {
-          // Windows networkStats has different property names
-          totalRx += (stat.rx_bytes || 0);
-          totalTx += (stat.tx_bytes || 0);
-          
-          this.logger.debug(`Windows interface ${stat.iface}: rx=${stat.rx_bytes}, tx=${stat.tx_bytes}`);
+
+      for (const iface of ifaces) {
+        try {
+          const statsArr = await si.networkStats(iface.iface);
+          const stat = statsArr[0];
+          if (!stat) continue;
+
+          totalRx += stat.rx_bytes || 0;
+          totalTx += stat.tx_bytes || 0;
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        } catch (e) {
+          /* empty */
         }
-      } else {
-        // Linux/macOS - standard property names
-        totalRx = networkStats.reduce((sum, stat) => sum + (stat.rx_bytes || 0), 0);
-        totalTx = networkStats.reduce((sum, stat) => sum + (stat.tx_bytes || 0), 0);
       }
-      
-      // Create a simple object with total bytes for speed calculation
-      const networkIO = { rx: totalRx, tx: totalTx };
-      
-      const { upload, download } = this.calculateNetworkSpeedFromIO(networkIO, timestamp);
-      this.logger.info(`Network speeds calculated - Upload: ${upload} B/s, Download: ${download} B/s`);
+
+      let upload = 0;
+      let download = 0;
+
+      if (this.lastNetSnapshot) {
+        const dt = (timestamp - this.lastNetSnapshot.time) / 1000;
+        if (dt > 0) {
+          upload = (totalTx - this.lastNetSnapshot.tx) / dt;
+          download = (totalRx - this.lastNetSnapshot.rx) / dt;
+        }
+      }
+
+      this.lastNetSnapshot = {
+        rx: totalRx,
+        tx: totalTx,
+        time: timestamp,
+      };
+
+      this.logger.info(
+        `Network speeds (DELTA) - Upload: ${Math.round(upload)} B/s, Download: ${Math.round(download)} B/s`
+      );
 
       // Calculate memory usage percentage
       const memoryUsage = memInfo.total > 0 ? (memInfo.used / memInfo.total) * 100 : 0;
@@ -194,131 +200,6 @@ export class SystemCollector {
         `Failed to collect dynamic system status: ${error instanceof Error ? error.message : String(error)}`
       );
     }
-  }
-
-  /**
-   * Calculate network upload and download speeds
-   * Uses delta between current and previous measurements
-   * @param networkStats Current network statistics
-   * @param timestamp Current timestamp
-   * @returns Object with upload and download speeds in bytes/second
-   */
-  /**
-   * Calculate network speed using system-level network IO stats
-   * Uses delta between current and previous measurements
-   * @param networkIO Current network IO statistics
-   * @param timestamp Current timestamp
-   * @returns Object with upload and download speeds in bytes/second
-   */
-  private calculateNetworkSpeedFromIO(
-    networkIO: any,
-    timestamp: number
-  ): { upload: number; download: number } {
-    // Get current total Rx and Tx bytes (use correct property names for networkIO)
-    const currentRx = networkIO.rx || 0;
-    const currentTx = networkIO.tx || 0;
-    
-    this.logger.debug(`Current Rx: ${currentRx}, Current Tx: ${currentTx}`);
-
-    // If this is the first measurement, store it and return 0
-    if (!this.lastNetworkStats) {
-      this.logger.debug('First measurement, storing initial stats');
-      this.lastNetworkStats = { rx: currentRx, tx: currentTx, timestamp };
-      return { upload: 0, download: 0 };
-    }
-
-    // Calculate time delta in seconds
-    const timeDelta = (timestamp - this.lastNetworkStats.timestamp) / 1000;
-    
-    this.logger.debug(`Time delta: ${timeDelta}s`);
-
-    if (timeDelta <= 0) {
-      return { upload: 0, download: 0 };
-    }
-
-    // Calculate bytes transferred since last measurement
-    const rxDelta = currentRx - this.lastNetworkStats.rx;
-    const txDelta = currentTx - this.lastNetworkStats.tx;
-    
-    this.logger.debug(`Rx delta: ${rxDelta}, Tx delta: ${txDelta}`);
-
-    // Calculate speeds in bytes/second
-    const download = Math.max(0, rxDelta / timeDelta);
-    const upload = Math.max(0, txDelta / timeDelta);
-    
-    this.logger.debug(`Calculated speeds - Upload: ${upload} B/s, Download: ${download} B/s`);
-
-    // Update last stats
-    this.lastNetworkStats = { rx: currentRx, tx: currentTx, timestamp };
-
-    return { upload, download };
-  }
-
-  /**
-   * Calculate network speed from individual network interfaces
-   * This method is kept for backward compatibility but not used by default
-   */
-  private calculateNetworkSpeed(
-    networkStats: si.Systeminformation.NetworkStatsData[],
-    timestamp: number
-  ): { upload: number; download: number } {
-    // Log network stats for debugging
-    this.logger.debug(`Network interfaces found: ${networkStats.length}`);
-    
-    // Filter out loopback interfaces
-    const activeInterfaces = networkStats.filter(stat => {
-      // Skip loopback interfaces (lo on Linux, Loopback on Windows)
-      const isLoopback = stat.iface.startsWith('lo') || stat.iface.toLowerCase().includes('loopback');
-      // Skip inactive interfaces if operstate is available
-      const isActive = !stat.operstate || stat.operstate === 'up' || stat.operstate === 'unknown';
-      
-      return !isLoopback && isActive;
-    });
-    
-    this.logger.debug(`Active interfaces: ${activeInterfaces.length}`);
-    
-    if (activeInterfaces.length === 0) {
-      return { upload: 0, download: 0 };
-    }
-
-    // Sum up all active network interfaces
-    const totalRx = activeInterfaces.reduce((sum, stat) => sum + (stat.rx_bytes || 0), 0);
-    const totalTx = activeInterfaces.reduce((sum, stat) => sum + (stat.tx_bytes || 0), 0);
-    
-    this.logger.debug(`Total Rx: ${totalRx}, Total Tx: ${totalTx}`);
-
-    // If this is the first measurement, store it and return 0
-    if (!this.lastNetworkStats) {
-      this.logger.debug('First measurement, storing initial stats');
-      this.lastNetworkStats = { rx: totalRx, tx: totalTx, timestamp };
-      return { upload: 0, download: 0 };
-    }
-
-    // Calculate time delta in seconds
-    const timeDelta = (timestamp - this.lastNetworkStats.timestamp) / 1000;
-    
-    this.logger.debug(`Time delta: ${timeDelta}s`);
-
-    if (timeDelta <= 0) {
-      return { upload: 0, download: 0 };
-    }
-
-    // Calculate bytes transferred since last measurement
-    const rxDelta = totalRx - this.lastNetworkStats.rx;
-    const txDelta = totalTx - this.lastNetworkStats.tx;
-    
-    this.logger.debug(`Rx delta: ${rxDelta}, Tx delta: ${txDelta}`);
-
-    // Calculate speeds in bytes/second
-    const download = Math.max(0, rxDelta / timeDelta);
-    const upload = Math.max(0, txDelta / timeDelta);
-    
-    this.logger.debug(`Calculated speeds - Upload: ${upload} B/s, Download: ${download} B/s`);
-
-    // Update last stats
-    this.lastNetworkStats = { rx: totalRx, tx: totalTx, timestamp };
-
-    return { upload, download };
   }
 
   /**
