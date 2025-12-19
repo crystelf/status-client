@@ -24,5 +24,8 @@
   "_maxRetries_description": "Maximum number of retry attempts for failed reports",
   
   "cacheSize": 100,
-  "_cacheSize_description": "Maximum number of reports to cache locally when server is unreachable"
+  "_cacheSize_description": "Maximum number of reports to cache locally when server is unreachable",
+  
+  "location": "",
+  "_location_description": "Custom location (e.g., 'Fujian', 'Beijing', 'New York'), override automatic detection"
 }

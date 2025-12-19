@@ -15,7 +15,7 @@ export class SystemCollector {
     time: number;
   };
 
-  constructor() {
+  constructor(private config?: { location?: string }) {
     this.logger = new Logger('SystemCollector');
   }
 
@@ -72,9 +72,12 @@ export class SystemCollector {
         });
       }
 
-      // Get geographic location (simplified - using timezone as proxy)
-      // In production, this could use IP geolocation services
-      const location = this.getLocationFromTimezone();
+      // Get geographic location and timezone (simplified - using timezone as proxy)
+      // In production, this could use IP geolocation services for more accurate location
+      const { location: autoLocation, timezone } = this.getLocationAndTimezone();
+      
+      // Use custom location from config if provided, otherwise use automatic detection
+      const location = this.config?.location?.trim() || autoLocation;
 
       return {
         cpuModel: cpuInfo.brand || 'Unknown',
@@ -87,6 +90,7 @@ export class SystemCollector {
         totalDisk: totalDisk,
         disks: disks,
         location: location,
+        timezone: timezone,
       };
     } catch (error) {
       this.logger.error('Failed to collect static system info', error);
@@ -203,23 +207,27 @@ export class SystemCollector {
   }
 
   /**
-   * Get approximate location from system timezone
+   * Get approximate location and timezone from system timezone
    * This is a simplified approach - production systems should use IP geolocation
-   * @returns Location string
+   * @returns Object containing location and timezone
    */
-  private getLocationFromTimezone(): string {
+  private getLocationAndTimezone(): { location: string; timezone: string } {
     try {
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      let location: string;
 
-      // Extract city/region from timezone (e.g., "America/New_York" -> "New York")
+      // Extract city/region from timezone (e.g., "Asia/Shanghai" -> "Shanghai")
       if (timezone.includes('/')) {
         const parts = timezone.split('/');
-        return parts[parts.length - 1].replace(/_/g, ' ');
+        location = parts[parts.length - 1].replace(/_/g, ' ');
+      } else {
+        location = timezone;
       }
-      return timezone;
+      
+      return { location, timezone };
     } catch (error) {
-      this.logger.error('Failed to getLocationFromTimezone', error);
-      return 'Unknown';
+      this.logger.error('Failed to getLocationAndTimezone', error);
+      return { location: 'Unknown', timezone: 'Unknown' };
     }
   }
 }

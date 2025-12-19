@@ -27,7 +27,7 @@ class MonitorClient {
     this.config = configManager.loadConfig();
 
     // Initialize collector and reporter
-    this.collector = new SystemCollector();
+    this.collector = new SystemCollector(this.config);
     this.reporter = new Reporter(this.config);
   }
 

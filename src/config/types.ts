@@ -11,4 +11,5 @@ export interface ClientConfig {
   minReportInterval: number;   // Minimum allowed report interval in milliseconds
   maxRetries: number;          // Maximum retry attempts for failed reports
   cacheSize: number;           // Local cache size limit
+  location?: string;           // Custom location (override automatic detection)
 }

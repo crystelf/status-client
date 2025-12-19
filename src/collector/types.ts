@@ -24,6 +24,7 @@ export interface StaticSystemInfo {
   totalDisk: number;            // Total disk capacity in bytes (sum of all disks)
   disks: DiskInfo[];            // Array of disk information
   location: string;             // Client geographic location (country/city)
+  timezone: string;             // Client timezone (e.g., Asia/Shanghai)
 }
 
 /**
