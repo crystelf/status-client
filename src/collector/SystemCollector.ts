@@ -181,7 +181,20 @@ export class SystemCollector {
       );
 
       // Calculate memory usage percentage
-      const memoryUsage = memInfo.total > 0 ? (memInfo.used / memInfo.total) * 100 : 0;
+      // For Linux, use available memory for more accurate calculation (excludes cache/buffers)
+      // For Windows/macOS, used memory is accurate
+      const totalMemory = memInfo.total || 0;
+      let usedMemory: number;
+      
+      if (os.platform() === 'linux' && memInfo.available !== undefined) {
+        // On Linux, use (total - available) for more accurate usage (excludes cache/buffers)
+        usedMemory = totalMemory - (memInfo.available || 0);
+      } else {
+        // On Windows/macOS, use reported used memory
+        usedMemory = memInfo.used || 0;
+      }
+      
+      const memoryUsage = totalMemory > 0 ? (usedMemory / totalMemory) * 100 : 0;
 
       // Calculate swap usage percentage
       const swapUsage = memInfo.swaptotal > 0 ? (memInfo.swapused / memInfo.swaptotal) * 100 : 0;
