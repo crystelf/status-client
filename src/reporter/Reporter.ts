@@ -99,6 +99,7 @@ export class Reporter {
       platform: platformName,
       staticInfo: this.staticInfo,
       dynamicStatus: dynamicStatus,
+      priority: this.config.priority || 0,
     };
   }
 
@@ -112,11 +113,17 @@ export class Reporter {
    */
   async report(payload: ReportPayload): Promise<void> {
     try {
-      // Send HTTP POST request to server
+      // Send HTTP POST request to server with authentication token if configured
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (this.config.authToken) {
+        headers['X-Auth-Token'] = this.config.authToken;
+      }
+      
       const response = await axios.post(`${this.config.serverUrl}/api/reports`, payload, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         timeout: 10000, // 10 second timeout
       });
 

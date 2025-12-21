@@ -27,5 +27,11 @@
   "_cacheSize_description": "Maximum number of reports to cache locally when server is unreachable",
   
   "location": "",
-  "_location_description": "Custom location (e.g., 'Fujian', 'Beijing', 'New York'), override automatic detection"
+  "_location_description": "Custom location (e.g., 'Fujian', 'Beijing', 'New York'), override automatic detection",
+  
+  "authToken": "",
+  "_authToken_description": "Authentication token for server validation (if required by server)",
+  
+  "priority": 0,
+  "_priority_description": "Client priority for sorting (lower number = higher priority, default: 0)"
 }

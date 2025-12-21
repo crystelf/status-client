@@ -14,6 +14,7 @@ export interface ReportPayload {
   platform: string; // Operating system type (windows, linux, darwin)
   staticInfo: StaticSystemInfo; // Static system information
   dynamicStatus: DynamicSystemStatus; // Dynamic system status
+  priority?: number; // Client priority for sorting
 }
 
 /**
