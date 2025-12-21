@@ -72,9 +72,9 @@ export class SystemCollector {
         });
       }
 
-      // Get geographic location and timezone (simplified - using timezone as proxy)
+      // Get geographic location (simplified - using timezone as proxy)
       // In production, this could use IP geolocation services for more accurate location
-      const { location: autoLocation, timezone } = this.getLocationAndTimezone();
+      const autoLocation = this.getLocation();
       
       // Use custom location from config if provided, otherwise use automatic detection
       const location = this.config?.location?.trim() || autoLocation;
@@ -90,7 +90,6 @@ export class SystemCollector {
         totalDisk: totalDisk,
         disks: disks,
         location: location,
-        timezone: timezone,
       };
     } catch (error) {
       this.logger.error('Failed to collect static system info', error);
@@ -207,11 +206,11 @@ export class SystemCollector {
   }
 
   /**
-   * Get approximate location and timezone from system timezone
+   * Get approximate location from system timezone
    * This is a simplified approach - production systems should use IP geolocation
-   * @returns Object containing location and timezone
+   * @returns Location string
    */
-  private getLocationAndTimezone(): { location: string; timezone: string } {
+  private getLocation(): string {
     try {
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       let location: string;
@@ -224,10 +223,10 @@ export class SystemCollector {
         location = timezone;
       }
       
-      return { location, timezone };
+      return location;
     } catch (error) {
-      this.logger.error('Failed to getLocationAndTimezone', error);
-      return { location: 'Unknown', timezone: 'Unknown' };
+      this.logger.error('Failed to getLocation', error);
+      return 'Unknown';
     }
   }
 }
